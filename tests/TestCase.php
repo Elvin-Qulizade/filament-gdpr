@@ -1,14 +1,17 @@
 <?php
 
-namespace VendorName\Skeleton\Tests;
+namespace ElvinQulizade\Gdpr\Tests;
 
 use BladeUI\Heroicons\BladeHeroiconsServiceProvider;
 use BladeUI\Icons\BladeIconsServiceProvider;
+use ElvinQulizade\Gdpr\GdprPlugin;
+use ElvinQulizade\Gdpr\GdprServiceProvider;
 use Filament\Actions\ActionsServiceProvider;
 use Filament\FilamentServiceProvider;
 use Filament\Forms\FormsServiceProvider;
 use Filament\Infolists\InfolistsServiceProvider;
 use Filament\Notifications\NotificationsServiceProvider;
+use Filament\Panel;
 use Filament\Schemas\SchemasServiceProvider;
 use Filament\Support\SupportServiceProvider;
 use Filament\Tables\TablesServiceProvider;
@@ -19,7 +22,6 @@ use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
 use RyanChandler\BladeCaptureDirective\BladeCaptureDirectiveServiceProvider;
-use VendorName\Skeleton\SkeletonServiceProvider;
 
 class TestCase extends Orchestra
 {
@@ -31,7 +33,7 @@ class TestCase extends Orchestra
         parent::setUp();
 
         Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'VendorName\\Skeleton\\Database\\Factories\\' . class_basename($modelName) . 'Factory'
+            fn (string $modelName) => 'ElvinQulizade\\Gdpr\\Database\\Factories\\' . class_basename($modelName) . 'Factory'
         );
     }
 
@@ -51,7 +53,7 @@ class TestCase extends Orchestra
             SupportServiceProvider::class,
             TablesServiceProvider::class,
             WidgetsServiceProvider::class,
-            SkeletonServiceProvider::class,
+            GdprServiceProvider::class,
         ];
 
         sort($providers);
@@ -62,10 +64,34 @@ class TestCase extends Orchestra
     public function getEnvironmentSetUp($app): void
     {
         $app['config']->set('database.default', 'testing');
+        $app['config']->set('app.key', 'base64:' . base64_encode(str_repeat('x', 32)));
     }
 
     protected function defineDatabaseMigrations(): void
     {
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        $this->loadMigrationsFrom(__DIR__ . '/Fixtures/migrations');
+
+        $tempMigrationsDir = sys_get_temp_dir() . '/gdpr-test-migrations';
+
+        if (! is_file($tempMigrationsDir . '/create_filament_gdpr_tables.php')) {
+            if (! is_dir($tempMigrationsDir)) {
+                mkdir($tempMigrationsDir, 0777, true);
+            }
+
+            foreach (glob(__DIR__ . '/../database/migrations/*.php.stub') ?: [] as $stub) {
+                copy($stub, $tempMigrationsDir . '/' . basename($stub, '.stub'));
+            }
+        }
+
+        $this->loadMigrationsFrom($tempMigrationsDir);
+    }
+
+    protected function panel(): Panel
+    {
+        return Panel::make()
+            ->id('admin')
+            ->path('admin')
+            ->default()
+            ->plugins([GdprPlugin::make()]);
     }
 }

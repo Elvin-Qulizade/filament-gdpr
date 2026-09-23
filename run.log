@@ -1,0 +1,9 @@
+PHPUnit Started (PHPUnit 12.5.33 using PHP 8.5.10 (cli) on WINNT)
+Test Runner Configured
+Bootstrap Finished (C:\Users\elvin.gulizada\Desktop\filament-gdpr\vendor/autoload.php)
+Event Facade Sealed
+Test Suite Loaded (1 test)
+Test Runner Triggered Warning (No code coverage driver available)
+
+   WARN  No code coverage driver available
+PHPUnit Finished (Shell Exit Code: 1)

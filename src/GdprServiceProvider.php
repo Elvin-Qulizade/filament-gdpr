@@ -1,26 +1,31 @@
 <?php
 
-namespace VendorName\Skeleton;
+namespace ElvinQulizade\Gdpr;
 
+use ElvinQulizade\Gdpr\Commands\PrivacyExportCommand;
+use ElvinQulizade\Gdpr\Commands\PrivacyRunCommand;
+use ElvinQulizade\Gdpr\Support\Anonymizer;
+use ElvinQulizade\Gdpr\Support\PersonalDataExporter;
+use ElvinQulizade\Gdpr\Support\RetentionRunner;
+use ElvinQulizade\Gdpr\Testing\TestsGdpr;
 use Filament\Support\Assets\AlpineComponent;
 use Filament\Support\Assets\Asset;
 use Filament\Support\Assets\Css;
 use Filament\Support\Assets\Js;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Facades\FilamentIcon;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Filesystem\Filesystem;
 use Livewire\Features\SupportTesting\Testable;
 use Spatie\LaravelPackageTools\Commands\InstallCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use VendorName\Skeleton\Commands\SkeletonCommand;
-use VendorName\Skeleton\Testing\TestsSkeleton;
 
-class SkeletonServiceProvider extends PackageServiceProvider
+class GdprServiceProvider extends PackageServiceProvider
 {
-    public static string $name = 'skeleton';
+    public static string $name = 'filament-gdpr';
 
-    public static string $viewNamespace = 'skeleton';
+    public static string $viewNamespace = 'filament-gdpr';
 
     public function configurePackage(Package $package): void
     {
@@ -36,7 +41,7 @@ class SkeletonServiceProvider extends PackageServiceProvider
                     ->publishConfigFile()
                     ->publishMigrations()
                     ->askToRunMigrations()
-                    ->askToStarRepoOnGitHub(':vendor_slug/:package_slug');
+                    ->askToStarRepoOnGitHub('elvinqulizade/filament-gdpr');
             });
 
         $configFileName = $package->shortName();
@@ -58,10 +63,27 @@ class SkeletonServiceProvider extends PackageServiceProvider
         }
     }
 
-    public function packageRegistered(): void {}
+    public function packageRegistered(): void
+    {
+        $this->app->scoped(Gdpr::class, function ($app) {
+            return new Gdpr(
+                runner: $app->make(RetentionRunner::class),
+                exporter: $app->make(PersonalDataExporter::class),
+                anonymizer: $app->make(Anonymizer::class),
+            );
+        });
+
+        $this->app->scoped(RetentionRunner::class, function ($app) {
+            return new RetentionRunner($app->make(Anonymizer::class));
+        });
+
+        $this->app->scoped(PersonalDataExporter::class, fn () => new PersonalDataExporter(config('filament-gdpr.disk') ?? 'local'));
+    }
 
     public function packageBooted(): void
     {
+        $this->registerScheduledRun();
+
         // Asset Registration
         FilamentAsset::register(
             $this->getAssets(),
@@ -80,18 +102,38 @@ class SkeletonServiceProvider extends PackageServiceProvider
         if (app()->runningInConsole()) {
             foreach (app(Filesystem::class)->files(__DIR__ . '/../stubs/') as $file) {
                 $this->publishes([
-                    $file->getRealPath() => base_path("stubs/skeleton/{$file->getFilename()}"),
-                ], 'skeleton-stubs');
+                    $file->getRealPath() => base_path("stubs/filament-gdpr/{$file->getFilename()}"),
+                ], 'filament-gdpr-stubs');
             }
         }
 
         // Testing
-        Testable::mixin(new TestsSkeleton);
+        Testable::mixin(new TestsGdpr);
+    }
+
+    protected function registerScheduledRun(): void
+    {
+        if (! config('filament-gdpr.schedule.enabled')) {
+            return;
+        }
+
+        $this->app->booted(function () {
+            $frequency = config('filament-gdpr.schedule.frequency', 'daily');
+            $supported = ['everyMinute', 'hourly', 'daily', 'weekly', 'monthly', 'everyTwoHours', 'everySixHours'];
+
+            if (! in_array($frequency, $supported, true) || ! method_exists(Schedule::class, $frequency)) {
+                $frequency = 'daily';
+            }
+
+            $this->app->make(Schedule::class)
+                ->command(PrivacyRunCommand::class)
+                ->{$frequency}();
+        });
     }
 
     protected function getAssetPackageName(): ?string
     {
-        return ':vendor_slug/:package_slug';
+        return 'elvinqulizade/filament-gdpr';
     }
 
     /**
@@ -100,9 +142,9 @@ class SkeletonServiceProvider extends PackageServiceProvider
     protected function getAssets(): array
     {
         return [
-            // AlpineComponent::make('skeleton', __DIR__ . '/../resources/dist/components/skeleton.js'),
-            // Css::make('skeleton-styles', __DIR__ . '/../resources/dist/skeleton.css'),
-            // Js::make('skeleton-scripts', __DIR__ . '/../resources/dist/skeleton.js'),
+            // AlpineComponent::make('filament-gdpr', __DIR__ . '/../resources/dist/components/filament-gdpr.js'),
+            // Css::make('filament-gdpr-styles', __DIR__ . '/../resources/dist/filament-gdpr.css'),
+            // Js::make('filament-gdpr-scripts', __DIR__ . '/../resources/dist/filament-gdpr.js'),
         ];
     }
 
@@ -112,7 +154,8 @@ class SkeletonServiceProvider extends PackageServiceProvider
     protected function getCommands(): array
     {
         return [
-            SkeletonCommand::class,
+            PrivacyRunCommand::class,
+            PrivacyExportCommand::class,
         ];
     }
 
@@ -146,7 +189,7 @@ class SkeletonServiceProvider extends PackageServiceProvider
     protected function getMigrations(): array
     {
         return [
-            'create_skeleton_table',
+            'create_filament_gdpr_tables',
         ];
     }
 }
