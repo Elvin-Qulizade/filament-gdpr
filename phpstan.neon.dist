@@ -15,5 +15,5 @@ parameters:
     ignoreErrors:
         # Package config files may use env(); this rule only understands the consuming app's config dir.
         - identifier: larastan.noEnvCallsOutsideOfConfig
-          path: config/gdpr.php
+          path: config/filament-gdpr.php
 
