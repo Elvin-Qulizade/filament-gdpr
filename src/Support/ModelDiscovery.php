@@ -17,11 +17,9 @@ class ModelDiscovery
     {
         $models = [];
 
-        foreach (static::directories() as $directory) {
-            if (! is_dir($directory)) {
-                continue;
-            }
+        $directory = app_path();
 
+        if (is_dir($directory)) {
             foreach (File::allFiles($directory) as $file) {
                 if ($file->getExtension() !== 'php') {
                     continue;
@@ -42,8 +40,6 @@ class ModelDiscovery
             }
         }
 
-        $models = array_merge((array) config('filament-gdpr.models', []), $models);
-
         $exclude = config('filament-gdpr.model_discovery.exclude', []);
 
         return collect($models)
@@ -54,26 +50,13 @@ class ModelDiscovery
             ->all();
     }
 
-    /**
-     * @return array<int, string>
-     */
-    protected static function directories(): array
-    {
-        return [
-            app_path('Models'),
-            app_path(),
-        ];
-    }
-
     protected static function classFromPath(string $path): ?string
     {
-        if (Str::startsWith($path, app_path('Models') . DIRECTORY_SEPARATOR)) {
-            $relative = Str::after($path, app_path('Models') . DIRECTORY_SEPARATOR);
-        } elseif (Str::startsWith($path, app_path() . DIRECTORY_SEPARATOR)) {
-            $relative = Str::after($path, app_path() . DIRECTORY_SEPARATOR);
-        } else {
+        if (! Str::startsWith($path, app_path() . DIRECTORY_SEPARATOR)) {
             return null;
         }
+
+        $relative = Str::after($path, app_path() . DIRECTORY_SEPARATOR);
 
         $class = str_replace('.php', '', $relative);
         $class = trim(str_replace(['/', '\\'], '\\', $class), '\\');

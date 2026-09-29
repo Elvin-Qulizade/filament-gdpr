@@ -56,11 +56,24 @@ class PersonalDataExporter
     protected function gather(string $dataSubject): array
     {
         $identifier = config('filament-gdpr.user_identifier', 'email');
+
+        $columnOverrides = collect(config('filament-gdpr.models', []))
+            ->filter(fn ($value, $key): bool => ! is_int($key))
+            ->map(fn ($config) => is_array($config) ? ($config['column'] ?? null) : $config);
+
+        $models = $columnOverrides->keys()
+            ->merge(array_keys(ModelDiscovery::models()))
+            ->unique()
+            ->filter(fn (string $model): bool => class_exists($model));
+
         $results = [];
 
-        foreach (config('filament-gdpr.models', []) as $model => $config) {
-            $options = is_array($config) ? $config : ['column' => $config];
-            $column = $options['column'] ?? $identifier;
+        foreach ($models as $model) {
+            $column = $columnOverrides->get($model) ?: $identifier;
+
+            if (! in_array($column, ModelDiscovery::columns($model), true)) {
+                continue;
+            }
 
             $records = (new $model)->newQuery()
                 ->where($column, $dataSubject)
@@ -68,6 +81,10 @@ class PersonalDataExporter
                 ->get()
                 ->map(fn ($record): array => $record->toArray())
                 ->all();
+
+            if ($records === []) {
+                continue;
+            }
 
             $results[class_basename($model)] = $records;
         }
